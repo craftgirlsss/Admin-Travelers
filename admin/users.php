@@ -5,11 +5,12 @@ require_once 'includes/header.php';
 require_once 'includes/sidebar.php';
 require_once '../config/database.php';
 
-// Panggil fungsi keamanan di awal file
 check_admin_access();
 
-// Logika untuk Aksi (Disable/Enable/Delete)
+// Logika Aksi (Disable/Enable/Delete) tetap sama di sini...
+
 if (isset($_GET['action']) && isset($_GET['id'])) {
+    // ... (LOGIKA AKSI DISABLE/ENABLE/DELETE SEBELUMNYA) ...
     $user_id = (int)$_GET['id'];
     $action = $_GET['action'];
     $message = "";
@@ -23,16 +24,14 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         
         if ($stmt->execute()) {
             $message = "User ID " . $user_id . " berhasil diubah status menjadi " . $new_status . ".";
+            log_admin_activity($action, 'users', $user_id, $conn, "Status diubah menjadi " . $new_status);
         } else {
             $message = "Gagal mengubah status: " . $conn->error;
         }
         $stmt->close();
 
     } elseif ($action == 'delete') {
-        // Implementasi Soft Delete: Set kolom status/is_active menjadi 'deleted' 
-        // ATAU tambahkan kolom `deleted_at` dan set timestamp.
-        // Kita gunakan set status='deleted' untuk kesederhanaan.
-        
+        // Soft Delete
         $stmt = $conn->prepare("UPDATE users SET status = 'deleted' WHERE id = ? AND role != 'super_admin'");
         $stmt->bind_param("i", $user_id);
 
@@ -43,29 +42,46 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         }
         $stmt->close();
     }
-    // Redirect untuk menghindari pengiriman ulang form (Post/Redirect/Get pattern)
     header("Location: users.php?status_msg=" . urlencode($message));
     exit();
 }
 
-// ----------------------------------------------------
-// QUERY DATA UTAMA
-// ----------------------------------------------------
 
-// Mengambil semua user (Client & Provider), tidak termasuk Super Admin
-$users_query = "
-    SELECT u.id, u.name, u.email, u.phone, u.role, u.status, p.company_name 
+// ----------------------------------------------------
+// QUERY DATA CLIENT
+// ----------------------------------------------------
+$client_query = "
+    SELECT u.id, u.name, u.email, u.phone, u.status 
     FROM users u
-    LEFT JOIN providers p ON u.id = p.user_id 
-    WHERE u.role != 'super_admin'
-    ORDER BY u.role, u.created_at DESC
+    WHERE u.role IN ('client', 'customer') -- DIPERBAIKI: Sertakan kedua kemungkinan role
+    ORDER BY u.created_at DESC
 ";
-$result = $conn->query($users_query);
+$client_result = $conn->query($client_query);
+$clients = [];
+if ($client_result) {
+    while ($row = $client_result->fetch_assoc()) {
+        $clients[] = $row;
+    }
+}
 
-$users = [];
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
-        $users[] = $row;
+
+// ----------------------------------------------------
+// QUERY DATA PROVIDER (Hanya yang Verified/Pending, TIDAK termasuk Unverified/Rejected)
+// Kita anggap Provider yang *sudah di-review* layak tampil di sini.
+// ----------------------------------------------------
+$provider_query = "
+    SELECT u.id, u.name, u.email, u.phone, u.status AS user_status, p.company_name, p.verification_status, p.id AS provider_db_id
+    FROM users u
+    JOIN providers p ON u.id = p.user_id 
+    WHERE u.role = 'provider' AND p.verification_status = 'verified'
+    ORDER BY p.verification_date DESC
+";
+$provider_result = $conn->query($provider_query);
+
+$providers = [];
+if ($provider_result) {
+    while ($row = $provider_result->fetch_assoc()) {
+        $providers[] = $row;
     }
 }
 ?>
@@ -88,63 +104,91 @@ if ($result) {
         <?php endif; ?>
 
         <div class="card shadow mb-4">
-            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Daftar Semua Pengguna</h6></div>
+            <div class="card-header py-3">
+                <ul class="nav nav-tabs card-header-tabs" id="userTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="client-tab" data-bs-toggle="tab" href="#client-list" role="tab">Daftar Client</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="provider-tab" data-bs-toggle="tab" href="#provider-list" role="tab">Daftar Provider (Verified)</a>
+                    </li>
+                </ul>
+            </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Nama / Perusahaan</th>
-                                <th>Email</th>
-                                <th>Telepon</th>
-                                <th>Role</th>
-                                <th>Status</th>
-                                <th>Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($users as $user): 
-                                // Tentukan nama yang ditampilkan berdasarkan role
-                                $display_name = ($user['role'] == 'provider' && $user['company_name']) ? $user['company_name'] : $user['name'];
-                                // Tentukan warna status
-                                $status_badge = '';
-                                if ($user['status'] == 'active') {
-                                    $status_badge = 'badge bg-success';
-                                } elseif ($user['status'] == 'disabled') {
-                                    $status_badge = 'badge bg-warning text-dark';
-                                } elseif ($user['status'] == 'deleted') {
-                                    $status_badge = 'badge bg-danger';
-                                }
-                            ?>
-                            <tr>
-                                <td><?php echo $user['id']; ?></td>
-                                <td><?php echo htmlspecialchars($display_name); ?></td>
-                                <td><?php echo htmlspecialchars($user['email']); ?></td>
-                                <td><?php echo htmlspecialchars($user['phone']); ?></td>
-                                <td><span class="badge bg-secondary"><?php echo ucfirst($user['role']); ?></span></td>
-                                <td><span class="<?php echo $status_badge; ?>"><?php echo ucfirst($user['status']); ?></span></td>
-                                <td>
-                                    <?php if ($user['status'] == 'active'): ?>
-                                        <a href="users.php?action=disable&id=<?php echo $user['id']; ?>" 
-                                           class="btn btn-warning btn-sm" 
-                                           onclick="return confirm('Yakin ingin MENONAKTIFKAN user ini?')"
-                                        >Disable</a>
-                                    <?php elseif ($user['status'] == 'disabled'): ?>
-                                        <a href="users.php?action=enable&id=<?php echo $user['id']; ?>" 
-                                           class="btn btn-success btn-sm"
-                                        >Enable</a>
-                                    <?php endif; ?>
-                                    
-                                    <a href="users.php?action=delete&id=<?php echo $user['id']; ?>" 
-                                       class="btn btn-danger btn-sm" 
-                                       onclick="return confirm('Yakin ingin MENGHAPUS user ini? (Soft Delete)')"
-                                    >Hapus</a>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                <div class="tab-content" id="userTabsContent">
+                    
+                    <div class="tab-pane fade show active" id="client-list" role="tabpanel">
+                        <h6 class="m-0 font-weight-bold text-primary mb-3">Total Client: <?php echo count($clients); ?></h6>
+                        <div class="table-responsive">
+                            <table class="table table-bordered" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nama</th>
+                                        <th>Email</th>
+                                        <th>Telepon</th>
+                                        <th>Status Akun</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($clients as $user): 
+                                        $status_badge = ($user['status'] == 'active') ? 'badge bg-success' : 'badge bg-warning text-dark';
+                                        if ($user['status'] == 'deleted') $status_badge = 'badge bg-danger';
+                                    ?>
+                                    <tr>
+                                        <td><?php echo $user['id']; ?></td>
+                                        <td><?php echo htmlspecialchars($user['name']); ?></td>
+                                        <td><?php echo htmlspecialchars($user['email']); ?></td>
+                                        <td><?php echo htmlspecialchars($user['phone']); ?></td>
+                                        <td><span class="<?php echo $status_badge; ?>"><?php echo ucfirst($user['status']); ?></span></td>
+                                        <td>
+                                            <a href="user_detail.php?id=<?php echo $user['id']; ?>" class="btn btn-info btn-sm">Detail & Aksi</a>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane fade" id="provider-list" role="tabpanel">
+                        <h6 class="m-0 font-weight-bold text-primary mb-3">Total Provider Terverifikasi: <?php echo count($providers); ?></h6>
+                        <div class="table-responsive">
+                            <table class="table table-bordered" width="100%" cellspacing="0">
+                                <thead>
+                                    <tr>
+                                        <th>ID User</th>
+                                        <th>Nama Perusahaan</th>
+                                        <th>Email Kontak</th>
+                                        <th>Status Verifikasi</th>
+                                        <th>Status Akun</th>
+                                        <th>Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($providers as $provider): 
+                                        $user_status_badge = ($provider['user_status'] == 'active') ? 'badge bg-success' : 'badge bg-warning text-dark';
+                                        if ($provider['user_status'] == 'deleted') $user_status_badge = 'badge bg-danger';
+
+                                        $verification_badge = ($provider['verification_status'] == 'verified') ? 'badge bg-primary' : 'badge bg-warning text-dark';
+                                    ?>
+                                    <tr>
+                                        <td><?php echo $provider['id']; ?></td>
+                                        <td><?php echo htmlspecialchars($provider['company_name']); ?></td>
+                                        <td><?php echo htmlspecialchars($provider['email']); ?></td>
+                                        <td><span class="<?php echo $verification_badge; ?>"><?php echo ucfirst($provider['verification_status']); ?></span></td>
+                                        <td><span class="<?php echo $user_status_badge; ?>"><?php echo ucfirst($provider['user_status']); ?></span></td>
+                                        <td>
+                                            <a href="user_detail.php?id=<?php echo $provider['id']; ?>" class="btn btn-info btn-sm">Detail & Aksi</a>
+                                        </td>
+                                    </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -153,11 +197,9 @@ if ($result) {
 </div>
 
 <?php 
-// Jika Anda tidak menggunakan file footer, pastikan ada penutup div dan script JS di sini
-// Jika menggunakan header.php seperti yang saya tunjukkan, Anda hanya perlu tag penutup:
 echo '</div>'; // Tutup div id="wrapper"
 ?>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script> 
 </body>
 </html>

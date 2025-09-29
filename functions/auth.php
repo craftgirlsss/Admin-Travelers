@@ -25,4 +25,34 @@ function check_admin_access() {
         exit();
     }
 }
+
+/**
+ * Mencatat setiap aksi Admin ke tabel admin_activities.
+ * @param string $action_type Tipe aksi (e.g., 'disable', 'approve', 'delete').
+ * @param string $target_table Tabel yang menjadi target aksi (e.g., 'users', 'trips', 'providers').
+ * @param int $target_id ID baris target yang diubah.
+ * @param mysqli $conn Objek koneksi database.
+ * @param string $description Deskripsi tambahan (opsional).
+ */
+function log_admin_activity($action_type, $target_table, $target_id, $conn, $description = null) {
+    if (!isset($_SESSION['user_id'])) {
+        // Jangan catat jika ID Admin tidak diketahui
+        return;
+    }
+
+    $admin_id = $_SESSION['user_id'];
+    
+    // Gunakan prepared statement untuk keamanan
+    $stmt = $conn->prepare("INSERT INTO admin_activities (admin_id, action_type, target_table, target_id, description, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+    $stmt->bind_param("isssi", $admin_id, $action_type, $target_table, $target_id, $description);
+
+    try {
+        $stmt->execute();
+    } catch (Exception $e) {
+        // Opsional: Log error database, tetapi jangan hentikan eksekusi utama
+        // echo "Error logging activity: " . $e->getMessage();
+    } finally {
+        $stmt->close();
+    }
+}
 ?>

@@ -9,6 +9,7 @@ check_admin_access();
 
 // Inisialisasi pesan status
 $status_msg = '';
+$admin_id = $_SESSION['user_id']; // Ambil ID Admin untuk logging
 
 // ==========================================================
 // LOGIKA AKSI MODERASI
@@ -25,6 +26,8 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil di-APPROVE.";
+            // ** LOGGING **
+            log_admin_activity('approve', 'trips', $trip_id, $conn, "Trip disetujui untuk ditampilkan.");
             $success = true;
         }
 
@@ -34,20 +37,19 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil di-SUSPEND.";
+            // ** LOGGING **
+            log_admin_activity('suspend', 'trips', $trip_id, $conn, "Trip ditangguhkan (suspended).");
             $success = true;
         }
 
     } elseif ($action == 'delete') {
-        // Hard Delete (gunakan dengan hati-hati!)
-        // Harus hapus data anak terlebih dahulu (trip_images, bookings, reviews)
-        
-        // Asumsi struktur DB Anda menggunakan ON DELETE CASCADE, 
-        // sehingga menghapus trip akan menghapus data di trip_images, bookings, reviews secara otomatis.
-        
+        // Hard Delete (Gunakan Hati-hati, asumsi ON DELETE CASCADE aktif)
         $stmt = $conn->prepare("DELETE FROM trips WHERE id = ?");
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil diHAPUS PERMANEN.";
+            // ** LOGGING **
+            log_admin_activity('delete', 'trips', $trip_id, $conn, "Trip dihapus permanen dari database.");
             $success = true;
         }
     }
@@ -62,7 +64,7 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
 }
 
 // ----------------------------------------------------
-// QUERY DATA UTAMA UNTUK TAMPILAN
+// QUERY DATA UTAMA UNTUK TAMPILAN (DITAMBAH FILTER VERIFIKASI)
 // ----------------------------------------------------
 
 $query = "
@@ -75,11 +77,16 @@ $query = "
         t.is_approved,
         t.created_at,
         u.name AS provider_name, 
+        p.verification_status, -- Ambil status verifikasi Provider
         (SELECT COUNT(b.id) FROM bookings b WHERE b.trip_id = t.id) AS total_bookings,
         (SELECT AVG(r.rating) FROM reviews r WHERE r.trip_id = t.id) AS avg_rating
     FROM trips t
     JOIN providers p ON t.provider_id = p.id
     JOIN users u ON p.user_id = u.id
+    
+    -- FILTER BARU: Hanya tampilkan Trip dari Provider yang sudah LULUS verifikasi
+    WHERE p.verification_status = 'verified' 
+    
     ORDER BY t.created_at DESC
 ";
 $result = $conn->query($query);
@@ -102,8 +109,7 @@ if ($result) {
     
     <div class="container-fluid p-4">
         <h1 class="mt-4 mb-4">Pusat Kontrol Trip</h1>
-
-        <?php if (isset($_GET['status_msg'])): ?>
+        <p class="text-info">Filter Aktif: Hanya menampilkan Trip dari Provider yang sudah **Verified**.</p> <?php if (isset($_GET['status_msg'])): ?>
             <div class="alert alert-<?php echo htmlspecialchars($_GET['alert_type'] ?? 'success'); ?>" role="alert">
                 <?php echo htmlspecialchars($_GET['status_msg']); ?>
             </div>
@@ -148,8 +154,8 @@ if ($result) {
                                 <td><?php echo htmlspecialchars($trip['title']); ?></td>
                                 <td><?php echo htmlspecialchars($trip['provider_name']); ?></td>
                                 <td>Rp <?php echo number_format($trip['price'], 0, ',', '.'); ?></td>
-                                <td><?php echo number_format($trip['avg_rating'], 1) ?: 'N/A'; ?> <i class="fas fa-star text-warning"></i></td>
-                                <td><?php echo number_format($trip['total_bookings']); ?></td>
+                                <td><?php echo number_format($trip['avg_rating'] ?? 0, 1) ?: 'N/A'; ?> <i class="fas fa-star text-warning"></i></td>
+                                <td><?php echo number_format($trip['total_bookings'] ?? 0); ?></td>
                                 <td><span class="badge <?php echo $status_badge; ?>"><?php echo ucfirst($trip['trip_status']); ?></span></td>
                                 <td><span class="badge <?php echo $moderation_badge; ?>"><?php echo $moderation_text; ?></span></td>
                                 <td>

@@ -9,6 +9,9 @@
         <a href="users.php" class="list-group-item list-group-item-action bg-dark">
             <i class="fas fa-users me-2"></i> User & Provider
         </a>
+        <a href="verification.php" class="list-group-item list-group-item-action bg-dark">
+            <i class="fas fa-circle-check me-2"></i> Verifikasi Provider
+        </a>
         <a href="trips.php" class="list-group-item list-group-item-action bg-dark">
             <i class="fas fa-plane-departure me-2"></i> Trip Management
         </a>
@@ -20,6 +23,9 @@
         </a>
         <a href="complaints.php" class="list-group-item list-group-item-action bg-dark">
             <i class="fas fa-headset me-2"></i> Chat Keluhan
+        </a>
+        <a href="logs.php" class="list-group-item list-group-item-action bg-dark">
+            <i class="fas fa-history me-2"></i> Admin Activity Log
         </a>
         <a href="../logout.php" class="list-group-item list-group-item-action bg-dark text-danger">
             <i class="fas fa-sign-out-alt me-2"></i> Logout
