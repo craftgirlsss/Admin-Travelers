@@ -59,7 +59,12 @@ $query = "
     SELECT 
         u.*, 
         p.company_name, p.address, p.description AS provider_desc, p.verification_status, p.verification_note,
-        p.verified_by_admin_id, p.verification_date
+        p.verified_by_admin_id, p.verification_date,
+        
+        -- Tambahkan semua kolom baru dari tabel providers di sini:
+        p.owner_name, p.entity_type, p.business_license_path, p.ktp_path, p.phone_number,
+        p.province, p.city, p.district, p.village, p.postal_code, p.rt, p.rw, p.company_logo_path
+        
     FROM users u
     LEFT JOIN providers p ON u.id = p.user_id
     WHERE u.id = ?
@@ -148,27 +153,74 @@ if ($user['role'] == 'provider') {
         </div>
         
         <?php if ($user['role'] == 'provider'): ?>
-        <div class="card shadow mt-4">
-            <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-info">Detail Perusahaan (Provider)</h6></div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <p><strong>Nama Perusahaan:</strong> <?php echo htmlspecialchars($user['company_name'] ?? '-'); ?></p>
-                        <p><strong>Alamat:</strong> <?php echo htmlspecialchars($user['address'] ?? '-'); ?></p>
-                        <p><strong>Deskripsi:</strong> <?php echo nl2br(htmlspecialchars($user['provider_desc'] ?? '-')); ?></p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>Status Verifikasi:</strong> <span class="badge <?php echo $verification_badge; ?>"><?php echo ucfirst($user['verification_status'] ?: 'N/A'); ?></span></p>
-                        <p><strong>Catatan Admin:</strong> <?php echo htmlspecialchars($user['verification_note'] ?: '-'); ?></p>
-                        <p><strong>Diverifikasi oleh:</strong> Admin ID #<?php echo htmlspecialchars($user['verified_by_admin_id'] ?: 'Belum'); ?></p>
-                        <p><strong>Tanggal Verifikasi:</strong> <?php echo $user['verification_date'] ? date('d M Y', strtotime($user['verification_date'])) : '-'; ?></p>
+            <div class="card shadow mt-4">
+                <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-info">Detail Perusahaan (Provider)</h6></div>
+                <div class="card-body">
+                    <div class="row">
                         
-                        <a href="verification.php?id=<?php echo $user['id']; ?>" class="btn btn-warning btn-sm mt-2">Ulangi Proses Verifikasi</a>
+                        <div class="col-md-6 border-end">
+                            <h6>1. Informasi Dasar</h6>
+                            <p><strong>Nama Perusahaan:</strong> <?php echo htmlspecialchars($user['company_name'] ?? '-'); ?></p>
+                            <p><strong>Nama Pemilik:</strong> <?php echo htmlspecialchars($user['owner_name'] ?? '-'); ?></p>
+                            <p><strong>Tipe Entitas:</strong> <span class="badge bg-secondary"><?php echo strtoupper(htmlspecialchars($user['entity_type'] ?? 'N/A')); ?></span></p>
+                            <p><strong>Telepon Kontak:</strong> <?php echo htmlspecialchars($user['phone_number'] ?? '-'); ?></p>
+                            <p><strong>Logo Perusahaan:</strong> 
+                                <?php if (!empty($user['company_logo_path'])): ?>
+                                    <a href="<?php echo htmlspecialchars($user['company_logo_path']); ?>" target="_blank" class="btn btn-sm btn-outline-info">Lihat Logo</a>
+                                <?php else: ?>
+                                    -
+                                <?php endif; ?>
+                            </p>
+                            <hr>
+                            <h6>Alamat Resmi</h6>
+                            <p><?php echo htmlspecialchars($user['address'] ?? '-'); ?></p>
+                            <p class="small text-muted">
+                                Provinsi: <?php echo htmlspecialchars($user['province'] ?? '-'); ?> / Kota: <?php echo htmlspecialchars($user['city'] ?? '-'); ?><br>
+                                Kec: <?php echo htmlspecialchars($user['district'] ?? '-'); ?> / Desa: <?php echo htmlspecialchars($user['village'] ?? '-'); ?><br>
+                                Kode Pos: <?php echo htmlspecialchars($user['postal_code'] ?? '-'); ?> (RT/RW: <?php echo htmlspecialchars($user['rt'] ?? '-'); ?>/<?php echo htmlspecialchars($user['rw'] ?? '-'); ?>)
+                            </p>
+                            <hr>
+                            <p><strong>Deskripsi Perusahaan:</strong></p>
+                            <p class="bg-light p-2"><?php echo nl2br(htmlspecialchars($user['provider_desc'] ?? '-')); ?></p>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>2. Dokumen dan Legalitas</h6>
+                            
+                            <p><strong>Dokumen KTP (Pemilik):</strong></p>
+                            <?php if (!empty($user['ktp_path'])): ?>
+                                <a href="<?php echo htmlspecialchars($user['ktp_path']); ?>" target="_blank" class="btn btn-sm btn-primary mb-3"><i class="fas fa-file-alt me-2"></i> INSPEKSI KTP</a>
+                            <?php else: ?>
+                                <span class="text-danger">Dokumen KTP Belum Diunggah.</span>
+                            <?php endif; ?>
+                            
+                            <p><strong>Izin Usaha (NIB/SIUP/Legalitas):</strong></p>
+                            <?php if ($user['entity_type'] == 'company'): ?>
+                                <?php if (!empty($user['business_license_path'])): ?>
+                                    <a href="<?php echo htmlspecialchars($user['business_license_path']); ?>" target="_blank" class="btn btn-sm btn-success mb-3"><i class="fas fa-file-contract me-2"></i> INSPEKSI LEGALITAS (COMPANY)</a>
+                                <?php else: ?>
+                                    <span class="text-danger">Izin Usaha (Company) Belum Diunggah.</span>
+                                <?php endif; ?>
+                            <?php elseif ($user['entity_type'] == 'umkm'): ?>
+                                <span class="text-muted">Tidak Wajib: Tipe entitas adalah UMKM.</span>
+                            <?php else: ?>
+                                <span class="text-secondary">Tipe entitas tidak terdefinisi.</span>
+                            <?php endif; ?>
+                            
+                            <hr>
+                            <h6>3. Status Moderasi</h6>
+                            <p><strong>Status Verifikasi:</strong> <span class="badge <?php echo $verification_badge; ?>"><?php echo ucfirst($user['verification_status'] ?: 'N/A'); ?></span></p>
+                            <p><strong>Diverifikasi oleh:</strong> Admin ID #<?php echo htmlspecialchars($user['verified_by_admin_id'] ?: 'Belum'); ?></p>
+                            <p><strong>Tanggal Verifikasi:</strong> <?php echo $user['verification_date'] ? date('d M Y', strtotime($user['verification_date'])) : '-'; ?></p>
+                            <p><strong>Catatan Admin Terakhir:</strong> <i class="text-danger small"><?php echo htmlspecialchars($user['verification_note'] ?? '-'); ?></i></p>
+
+                            <a href="verification.php?id=<?php echo $user_id; ?>" class="btn btn-warning btn-sm mt-2"><i class="fas fa-gavel me-2"></i> Pindah ke Panel Verifikasi</a>
+                        </div>
+                        
                     </div>
                 </div>
             </div>
-        </div>
-        <?php endif; ?>
+            <?php endif; ?>
 
     </div>
 </div>

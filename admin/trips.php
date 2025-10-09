@@ -1,6 +1,7 @@
 <?php
 // admin/trips.php
 require_once '../functions/auth.php'; 
+// Asumsi functions/log_admin_activity.php sudah di-require di auth.php atau di tempat lain
 require_once 'includes/header.php';
 require_once 'includes/sidebar.php';
 require_once '../config/database.php';
@@ -19,52 +20,56 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
     $action = $_GET['action'];
     $success = false;
     $message_prefix = "Trip ID " . $trip_id;
+    $alert_type = 'danger';
+    
+    // Asumsi function log_admin_activity() sudah terdefinisi
+    if (!function_exists('log_admin_activity')) {
+        // Placeholder jika function logging belum dibuat
+        function log_admin_activity($type, $table, $id, $conn, $desc) {}
+    }
 
     if ($action == 'approve') {
-        // Set is_approved menjadi TRUE
-        $stmt = $conn->prepare("UPDATE trips SET is_approved = TRUE, rejection_reason = NULL WHERE id = ?");
+        // Mengubah approval_status menjadi 'approved'
+        $stmt = $conn->prepare("UPDATE trips SET approval_status = 'approved', rejection_reason = NULL, is_approved = 1 WHERE id = ?");
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil di-APPROVE.";
-            // ** LOGGING **
-            log_admin_activity('approve', 'trips', $trip_id, $conn, "Trip disetujui untuk ditampilkan.");
+            log_admin_activity('approve', 'trips', $trip_id, $conn, "Trip disetujui, approval_status: approved.");
             $success = true;
+            $alert_type = 'success';
         }
 
     } elseif ($action == 'suspend') {
-        // Set trip_status menjadi suspended
-        $stmt = $conn->prepare("UPDATE trips SET status = 'suspended' WHERE id = ?");
+        // Mengubah approval_status menjadi 'suspended'
+        $stmt = $conn->prepare("UPDATE trips SET approval_status = 'suspended', is_approved = 0 WHERE id = ?");
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil di-SUSPEND.";
-            // ** LOGGING **
-            log_admin_activity('suspend', 'trips', $trip_id, $conn, "Trip ditangguhkan (suspended).");
+            log_admin_activity('suspend', 'trips', $trip_id, $conn, "Trip ditangguhkan, approval_status: suspended.");
             $success = true;
+            $alert_type = 'warning';
         }
 
     } elseif ($action == 'delete') {
-        // Hard Delete (Gunakan Hati-hati, asumsi ON DELETE CASCADE aktif)
+        // Hard Delete
         $stmt = $conn->prepare("DELETE FROM trips WHERE id = ?");
         $stmt->bind_param("i", $trip_id);
         if ($stmt->execute()) {
             $status_msg = $message_prefix . " berhasil diHAPUS PERMANEN.";
-            // ** LOGGING **
             log_admin_activity('delete', 'trips', $trip_id, $conn, "Trip dihapus permanen dari database.");
             $success = true;
+            $alert_type = 'success';
         }
     }
     
     // Redirect untuk menghindari pengiriman ulang form
-    if ($success) {
-        header("Location: trips.php?status_msg=" . urlencode($status_msg) . "&alert_type=success");
-    } else {
-        header("Location: trips.php?status_msg=" . urlencode("Gagal melakukan aksi: " . $conn->error) . "&alert_type=danger");
-    }
+    $final_msg = $success ? $status_msg : "Gagal melakukan aksi: " . $conn->error;
+    header("Location: trips.php?status_msg=" . urlencode($final_msg) . "&alert_type=" . urlencode($alert_type));
     exit();
 }
 
 // ----------------------------------------------------
-// QUERY DATA UTAMA UNTUK TAMPILAN (DITAMBAH FILTER VERIFIKASI)
+// QUERY DATA UTAMA UNTUK TAMPILAN
 // ----------------------------------------------------
 
 $query = "
@@ -74,17 +79,18 @@ $query = "
         t.location, 
         t.price, 
         t.status AS trip_status,
-        t.is_approved,
+        t.approval_status,   
         t.created_at,
+        p.verification_status,
         u.name AS provider_name, 
-        p.verification_status, -- Ambil status verifikasi Provider
+        u.id AS user_id,
         (SELECT COUNT(b.id) FROM bookings b WHERE b.trip_id = t.id) AS total_bookings,
         (SELECT AVG(r.rating) FROM reviews r WHERE r.trip_id = t.id) AS avg_rating
     FROM trips t
     JOIN providers p ON t.provider_id = p.id
     JOIN users u ON p.user_id = u.id
     
-    -- FILTER BARU: Hanya tampilkan Trip dari Provider yang sudah LULUS verifikasi
+    -- Filter hanya tampilkan Trip dari Provider yang sudah LULUS verifikasi
     WHERE p.verification_status = 'verified' 
     
     ORDER BY t.created_at DESC
@@ -109,7 +115,9 @@ if ($result) {
     
     <div class="container-fluid p-4">
         <h1 class="mt-4 mb-4">Pusat Kontrol Trip</h1>
-        <p class="text-info">Filter Aktif: Hanya menampilkan Trip dari Provider yang sudah **Verified**.</p> <?php if (isset($_GET['status_msg'])): ?>
+        <p class="text-info">Filter Aktif: Hanya menampilkan Trip dari Provider yang sudah **Verified**.</p> 
+        
+        <?php if (isset($_GET['status_msg'])): ?>
             <div class="alert alert-<?php echo htmlspecialchars($_GET['alert_type'] ?? 'success'); ?>" role="alert">
                 <?php echo htmlspecialchars($_GET['status_msg']); ?>
             </div>
@@ -135,37 +143,48 @@ if ($result) {
                         </thead>
                         <tbody>
                             <?php foreach ($trips as $trip): 
-                                // Tentukan Badge Status Trip
+                                // Tentukan Badge Status Trip (status ketersediaan/trip)
                                 $status_badge = 'bg-secondary';
                                 if ($trip['trip_status'] == 'available') $status_badge = 'bg-success';
                                 if ($trip['trip_status'] == 'suspended') $status_badge = 'bg-warning text-dark';
                                 if ($trip['trip_status'] == 'canceled') $status_badge = 'bg-danger';
 
-                                // Tentukan Badge Moderasi
+                                // Tentukan Badge Moderasi BARU (berdasarkan approval_status)
                                 $moderation_badge = 'bg-danger';
                                 $moderation_text = 'Pending';
-                                if ($trip['is_approved']) {
+
+                                if ($trip['approval_status'] == 'approved') {
                                     $moderation_badge = 'bg-primary';
                                     $moderation_text = 'Approved';
+                                } elseif ($trip['approval_status'] == 'suspended') {
+                                    $moderation_badge = 'bg-warning text-dark';
+                                    $moderation_text = 'Suspended';
                                 }
                             ?>
                             <tr>
                                 <td><?php echo $trip['id']; ?></td>
                                 <td><?php echo htmlspecialchars($trip['title']); ?></td>
-                                <td><?php echo htmlspecialchars($trip['provider_name']); ?></td>
+                                <td>
+                                    <?php echo htmlspecialchars($trip['provider_name']); ?>
+                                    <a href="user_detail.php?id=<?php echo $trip['user_id']; ?>" class="badge bg-secondary text-white ms-1" title="Lihat Detail Provider"><i class="fas fa-eye"></i></a>
+                                </td>
                                 <td>Rp <?php echo number_format($trip['price'], 0, ',', '.'); ?></td>
                                 <td><?php echo number_format($trip['avg_rating'] ?? 0, 1) ?: 'N/A'; ?> <i class="fas fa-star text-warning"></i></td>
                                 <td><?php echo number_format($trip['total_bookings'] ?? 0); ?></td>
                                 <td><span class="badge <?php echo $status_badge; ?>"><?php echo ucfirst($trip['trip_status']); ?></span></td>
                                 <td><span class="badge <?php echo $moderation_badge; ?>"><?php echo $moderation_text; ?></span></td>
                                 <td>
-                                    <?php if (!$trip['is_approved']): ?>
+                                    <a href="trip_detail.php?id=<?php echo $trip['id']; ?>" 
+                                       class="btn btn-info btn-sm mb-1"
+                                    >Detail</a>
+
+                                    <?php if ($trip['approval_status'] != 'approved'): ?>
                                         <a href="trips.php?action=approve&id=<?php echo $trip['id']; ?>" 
                                            class="btn btn-primary btn-sm mb-1"
                                         >Approve</a>
                                     <?php endif; ?>
                                     
-                                    <?php if ($trip['trip_status'] != 'suspended'): ?>
+                                    <?php if ($trip['approval_status'] != 'suspended'): ?>
                                         <a href="trips.php?action=suspend&id=<?php echo $trip['id']; ?>" 
                                            class="btn btn-warning btn-sm mb-1" 
                                            onclick="return confirm('Yakin ingin MENANGGUHKAN (SUSPEND) Trip ini?')"

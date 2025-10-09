@@ -21,6 +21,9 @@
         <a href="reviews.php" class="list-group-item list-group-item-action bg-dark">
             <i class="fas fa-star me-2"></i> Review Moderation
         </a>
+        <a href="provider_tickets.php" class="list-group-item list-group-item-action bg-dark">
+            <i class="fas fa-headset me-2"></i> Tiket Dukungan Provider
+        </a>
         <a href="complaints.php" class="list-group-item list-group-item-action bg-dark">
             <i class="fas fa-headset me-2"></i> Chat Keluhan
         </a>
