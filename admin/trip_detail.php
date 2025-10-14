@@ -4,6 +4,8 @@ require_once '../functions/auth.php';
 require_once 'includes/header.php';
 require_once 'includes/sidebar.php';
 require_once '../config/database.php';
+// BASE URL yang Anda tambahkan
+define('BASE_IMAGE_URL', 'https://provider-travelers.karyadeveloperindonesia.com'); 
 
 check_admin_access();
 
@@ -148,18 +150,34 @@ if ($trip['approval_status'] == 'suspended') $moderation_badge = 'bg-warning tex
                 </div>
                 
                 <div class="card shadow mb-4">
-                    <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Gambar Trip</h6></div>
+                    <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">Gambar Trip (<?php echo count($images); ?> Gambar)</h6></div>
                     <div class="card-body row">
                         <?php if (!empty($images)): ?>
-                            <?php foreach ($images as $img): ?>
-                                <div class="col-md-3 mb-3">
-                                    <a href="<?php echo htmlspecialchars($img['image_url']); ?>" target="_blank">
-                                        <img src="<?php echo htmlspecialchars($img['image_url']); ?>" class="img-fluid rounded" alt="Gambar Trip">
+                            <?php foreach ($images as $img): 
+                                $image_url = htmlspecialchars($img['image_url']);
+                                // MENGGABUNGKAN BASE_IMAGE_URL
+                                $image_url = BASE_IMAGE_URL . '/' . ltrim($image_url, '/');
+                            ?>
+                                <div class="col-6 col-md-4 col-lg-3 mb-4"> 
+                                    <a href="<?php echo $image_url; ?>" target="_blank" class="d-block text-decoration-none">
+                                        <div class="image-preview-container position-relative overflow-hidden border rounded" 
+                                             style="height: 150px; background-color: #f8f9fa;">
+                                            <img src="<?php echo $image_url; ?>" 
+                                                 class="img-fluid w-100 h-100" 
+                                                 alt="Gambar Trip"
+                                                 style="object-fit: cover;">
+                                            <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center bg-dark bg-opacity-50 text-white opacity-0 transition-opacity"
+                                                 onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+                                                <i class="fas fa-search-plus fa-lg"></i>
+                                            </div>
+                                        </div>
                                     </a>
                                 </div>
                             <?php endforeach; ?>
                         <?php else: ?>
-                            <p class="text-muted">Tidak ada gambar yang diunggah.</p>
+                            <div class="col-12">
+                                <p class="text-muted">Tidak ada gambar yang diunggah untuk trip ini.</p>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>

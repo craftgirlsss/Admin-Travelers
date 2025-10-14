@@ -1,0 +1,56 @@
+/* assets/css/style.css */
+
+/* 1. Warna Dasar Sidebar Dark Fresh */
+.bg-dark-fresh {
+    background-color: #212529; /* Darker than default dark */
+    color: #f8f9fa;
+    transition: all 0.3s;
+}
+
+.sidebar-heading {
+    padding: 1rem 1.5rem;
+}
+
+/* 2. Style List Group Item */
+.list-group-nav .list-group-item-action {
+    background-color: #212529;
+    color: #adb5bd; /* Teks abu-abu muda */
+    border: none;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    border-left: 5px solid transparent; /* Garis indikator */
+}
+
+/* 3. Hover dan Focus */
+.list-group-nav .list-group-item-action:hover,
+.list-group-nav .list-group-item-action:focus {
+    background-color: #2c313a; /* Sedikit lebih terang saat di-hover */
+    color: #ffffff; /* Teks menjadi putih penuh */
+    border-left-color: #0d6efd; /* Warna primary Bootstrap */
+}
+
+/* 4. Item Aktif */
+.list-group-nav .list-group-item-action.active {
+    background-color: #0d6efd !important; /* Warna primary Bootstrap */
+    color: #ffffff;
+    border-color: #0d6efd !important;
+    border-left-color: #0d6efd; 
+    font-weight: 600;
+}
+
+/* 5. Aksen Logout */
+.list-group-nav .sidebar-logout.text-danger {
+    color: #dc3545 !important; 
+}
+.list-group-nav .sidebar-logout.text-danger:hover {
+    color: #f8f9fa !important;
+    background-color: #dc3545;
+}
+
+/* 6. Contoh untuk Tampilan Sidebar (Opsional) */
+#sidebar-wrapper {
+    min-height: 100vh;
+    width: 250px; /* Lebar Sidebar */
+    /* Anda mungkin memerlukan lebih banyak CSS jika ini adalah sidebar yang dapat dilipat */
+}
